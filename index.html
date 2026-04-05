@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SYSTEM_CRASH // 终端破壁系统 (流星极速版)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+        
+        body, html {
+            width: 100%; height: 100%; 
+            background-color: #02050a; 
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            display: flex; justify-content: center; align-items: center;
+            color: #00f3ff;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative; width: 100%; max-width: 480px; height: 100%; max-height: 900px;
+            background-color: #02050a;
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+            background-size: 25px 25px;
+            background-position: center center;
+            overflow: hidden;
+            border-left: 1px solid rgba(0, 243, 255, 0.2);
+            border-right: 1px solid rgba(0, 243, 255, 0.2);
+            animation: scrollGrid 15s linear infinite; 
+        }
+
+        @keyframes scrollGrid {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 50px; }
+        }
+
+        #crt-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 99;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+            background-size: 100% 4px;
+            box-shadow: inset 0 0 80px rgba(0,0,0,0.9);
+            opacity: 0.85;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; position: relative; z-index: 2; transition: filter 0.05s; }
+        
+        .chromatic-aberration { animation: glitch-anim 0.1s infinite alternate; }
+        @keyframes glitch-anim {
+            0% { filter: drop-shadow(4px 0 0 rgba(255,0,60,0.8)) drop-shadow(-4px 0 0 rgba(0,255,255,0.8)); }
+            100% { filter: drop-shadow(-4px 0 0 rgba(255,0,60,0.8)) drop-shadow(4px 0 0 rgba(0,255,255,0.8)); }
+        }
+        
+        #top-hud {
+            position: absolute; top: 30px; left: 0; width: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 5; pointer-events: none;
+            text-shadow: 0 0 8px rgba(0, 243, 255, 0.8);
+        }
+        .hud-score { 
+            font-size: 24px; font-weight: bold; color: #00ff66; 
+            border: 1px solid rgba(0, 255, 102, 0.5);
+            background: rgba(0, 20, 10, 0.6);
+            padding: 8px 20px; box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
+            letter-spacing: 2px;
+        }
+        .hud-score span { color: #fff; }
+        .hud-highscore { 
+            font-size: 14px; color: #00f3ff; margin-top: 10px; 
+            border-bottom: 1px dashed rgba(0, 243, 255, 0.5);
+            padding-bottom: 4px; letter-spacing: 1px;
+        }
+
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; justify-content: center; align-items: center; z-index: 10;
+        }
+        .hidden { display: none !important; }
+        
+        @keyframes glitchIn {
+            0% { clip-path: inset(100% 0 0 0); opacity: 0; }
+            20% { clip-path: inset(0 0 80% 0); opacity: 1; transform: translateX(-10px); }
+            40% { clip-path: inset(40% 0 20% 0); transform: translateX(10px); }
+            60% { clip-path: inset(10% 0 60% 0); transform: translateX(-5px); }
+            80% { clip-path: inset(0 0 0 0); transform: translateX(0); }
+            100% { clip-path: inset(0 0 0 0); opacity: 1; }
+        }
+        
+        .panel {
+            background: rgba(2, 6, 16, 0.85); padding: 25px;
+            border: 1px solid #00f3ff;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2), inset 0 0 20px rgba(0, 243, 255, 0.1);
+            pointer-events: auto; width: 90%; max-width: 360px; 
+            display: flex; flex-direction: column; gap: 12px;
+            backdrop-filter: blur(8px); opacity: 0;
+            position: relative;
+        }
+        .panel::before, .panel::after {
+            content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #00f3ff;
+        }
+        .panel::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+        .panel::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+        .panel.show { display: flex; animation: glitchIn 0.4s ease-out forwards; }
+
+        h1 { color: #fff; font-size: 24px; margin: 0; text-shadow: 0 0 10px #00f3ff; letter-spacing: 2px;}
+        p { color: #aaddff; font-size: 12px; margin: 0; line-height: 1.5;}
+        .highlight-text { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; font-size: 16px;}
+        
+        .legend { 
+            display: flex; flex-direction: column; gap: 6px; text-align: left; font-size: 11px; margin: 5px 0; 
+            background: rgba(0, 243, 255, 0.05); padding: 12px; border-left: 3px solid #00f3ff;
+            max-height: 300px; overflow-y: auto;
+        }
+        .legend-title { color: #00f3ff; font-weight: bold; margin-bottom: 3px; border-bottom: 1px solid rgba(0,243,255,0.3); padding-bottom: 3px;}
+        .legend-item { display: flex; align-items: center; gap: 10px; color: #fff;}
+        .color-box { width: 10px; height: 10px; box-shadow: 0 0 5px currentColor; flex-shrink: 0;}
+        
+        button {
+            background: rgba(0, 243, 255, 0.1); border: 1px solid #00f3ff;
+            color: #00f3ff; padding: 12px 0; width: 100%;
+            font-size: 16px; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+            letter-spacing: 2px; text-shadow: 0 0 5px #00f3ff;
+            box-shadow: inset 0 0 10px rgba(0, 243, 255, 0.2);
+            transition: all 0.2s; position: relative; overflow: hidden; margin-top: 5px;
+        }
+        button:hover { background: rgba(0, 243, 255, 0.3); box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.5); }
+        button:active { transform: scale(0.95); }
+        button::before { content: '>> '; color: #00ff66; }
+
+        #reviveBtn {
+            background: rgba(255, 170, 0, 0.1); border: 1px solid #ffaa00;
+            color: #ffaa00; text-shadow: 0 0 5px #ffaa00;
+            box-shadow: inset 0 0 10px rgba(255, 170, 0, 0.2);
+        }
+        #reviveBtn:hover { background: rgba(255, 170, 0, 0.3); box-shadow: inset 0 0 20px rgba(255, 170, 0, 0.5); }
+        #reviveBtn::before { content: '[AD] '; color: #fff; }
+        .revive-count { font-size: 12px; color: #fff; opacity: 0.8; }
+
+        .floating-text {
+            position: absolute; font-size: 20px; font-family: 'Share Tech Mono', monospace;
+            color: #ff00ff; text-shadow: 0 0 10px #ff00ff; pointer-events: none;
+            z-index: 20; transform: translate(-50%, -50%);
+            animation: glitchUp 0.6s linear forwards; white-space: nowrap;
+        }
+        @keyframes glitchUp {
+            0% { opacity: 1; transform: translate(-50%, 0px) scale(1); }
+            50% { opacity: 0.8; transform: translate(-52%, -20px) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -40px) scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="crt-overlay"></div>
+    
+    <div id="top-hud">
+        <div id="scoreDisplay" class="hud-score">DATA_STREAM // <span>0000</span></div>
+        <div id="highScoreDisplay" class="hud-highscore">MAX_SCORE // [0000]</div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="startPanel" class="panel show">
+            <h1 id="titleText">SYS_BREAK</h1>
+            <p id="descText">Deep Dive Protocol initiated. Survive the anomalies.</p>
+            <div class="legend" id="legendBox">
+                <div class="legend-title">SYSTEM DATA // Entities</div>
+                <div class="legend-item"><div class="color-box" style="background:#00f3ff; color:#00f3ff"></div> LOG 01: 普通数据块</div>
+                <div class="legend-item"><div class="color-box" style="background:#aaddff; color:#aaddff"></div> LOG 02: 坚硬防火墙</div>
+                <div class="legend-item"><div class="color-box" style="background:#ff003c; color:#ff003c"></div> WARN 03: 核心陷阱 (第4关起)</div>
+                <div class="legend-title" style="margin-top: 5px;">ANOMALIES // 异常机制</div>
+                <div class="legend-item"><div class="color-box" style="background:#ffaa00; color:#ffaa00"></div> ERR 04: 漂移数据 (第4关起)</div>
+                <div class="legend-item"><div class="color-box" style="background:#00ff66; color:#00ff66"></div> ERR 05: 虚相矩阵 (计算频闪)</div>
+                <div class="legend-item"><div class="color-box" style="background:#b500ff; color:#b500ff"></div> ERR 06: 引力异常 (超速偏转)</div>
+            </div>
+            <button id="reviveBtn" style="display: none;">REVIVE <span id="reviveCountText" class="revive-count">(3/3)</span></button>
+            <button id="startBtn">EXECUTE_RUN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('game-container');
+    
+    const startPanel = document.getElementById('startPanel');
+    const startBtn = document.getElementById('startBtn');
+    const reviveBtn = document.getElementById('reviveBtn');
+    const titleText = document.getElementById('titleText');
+    const descText = document.getElementById('descText');
+    const legendBox = document.getElementById('legendBox');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const highScoreDisplay = document.getElementById('highScoreDisplay');
+
+    let width, height, centerX, centerY, animationFrameId;
+    
+    const STATE = { START: 0, PLAYING: 1, GAMEOVER: 2, TRANSITION_OUT: 3 };
+    let currentState = STATE.START;
+
+    const pad = (num) => { let s = String(num); while(s.length < 4) s = '0' + s; return s; };
+
+    let score = 0; 
+    let highScore = 0;
+    try { highScore = parseInt(localStorage.getItem('sysCrashHighScoreV5')) || 0; } catch(e) {}
+    
+    let level = 1;
+    let comboCount = 0;
+    let lastHitTime = 0;
+    let hasRevived = false; 
+    
+    const MAX_REVIVES = 3;
+    let reviveCount = 0; 
+    
+    const COMBO_TIMEOUT = 2500; 
+
+    highScoreDisplay.innerText = `MAX_SCORE // [${pad(highScore)}]`;
+
+    const C_NORMAL = '#00f3ff';
+    const C_HARD = '#aaddff';
+    const C_BOMB = '#ff003c';
+    const C_MOVING = '#ffaa00'; 
+    const C_PHASING = '#00ff66'; 
+    const C_REPULSOR = '#b500ff'; 
+    
+    const BASE_BALL_SPEED = 2.8;  
+    const MAX_BALL_SPEED = 9.0; 
+    const BALL_RADIUS = 6; 
+    const BARRIER_THICKNESS = 12; 
+    
+    const TYPE = { NORMAL: 1, HARD: 2, BOMB: 3, MOVING: 4, PHASING: 5, REPULSOR: 6 };
+
+    let balls = []; 
+    let barriers = [];
+    let globalRotation = 0;
+    let particles = []; 
+    
+    let screenShakeOffset = {x: 0, y: 0};
+    let shakeIntensity = 0;
+    let isDragging = false;
+    let lastX = 0;
+    const ROTATION_SENSITIVITY = 0.015;
+
+    function resize() {
+        let oldCenterX = centerX; let oldCenterY = centerY;
+        width = container.clientWidth; height = container.clientHeight;
+        canvas.width = width; canvas.height = height;
+        centerX = width / 2; centerY = height / 2;
+        if (oldCenterX !== undefined && oldCenterY !== undefined) {
+            let offset_x = centerX - oldCenterX; let offset_y = centerY - oldCenterY;
+            balls.forEach(b => { b.x += offset_x; b.y += offset_y; });
+            particles.forEach(p => { p.x += offset_x; p.y += offset_y; });
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function getPointerX(e) {
+        if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
+        return e.clientX || 0; 
+    }
+
+    function handlePointerDown(e) {
+        if (currentState === STATE.GAMEOVER || currentState === STATE.START) return;
+        isDragging = true; lastX = getPointerX(e);
+    }
+    function handlePointerMove(e) {
+        if (e.cancelable && e.type.indexOf('touch') !== -1) e.preventDefault(); 
+        if (!isDragging || (currentState === STATE.GAMEOVER || currentState === STATE.START)) return;
+        let currentX = getPointerX(e);
+        globalRotation += (currentX - lastX) * ROTATION_SENSITIVITY;
+        globalRotation = (globalRotation + Math.PI * 2) % (Math.PI * 2);
+        lastX = currentX;
+    }
+    function handlePointerUp() { isDragging = false; }
+
+    container.addEventListener('mousedown', handlePointerDown);
+    container.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    container.addEventListener('touchstart', handlePointerDown, {passive: false});
+    container.addEventListener('touchmove', handlePointerMove, {passive: false});
+    window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
+
+    function spawnFloatingText(text, x, y, color) {
+        let el = document.createElement('div');
+        el.className = 'floating-text'; el.innerText = text;
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        el.style.color = color || C_PHASING; el.style.textShadow = `0 0 8px ${color || C_PHASING}`;
+        container.appendChild(el);
+        setTimeout(() => { if (el.parentNode) el.remove(); }, 600);
+    }
+
+    function triggerShake(intensity = 5) { 
+        shakeIntensity = intensity; 
+        if (intensity >= 6) canvas.classList.add('chromatic-aberration');
+    }
+
+    function applyShake() {
+        if (shakeIntensity > 0) {
+            screenShakeOffset.x = (Math.random() - 0.5) * shakeIntensity;
+            screenShakeOffset.y = (Math.random() - 0.5) * shakeIntensity;
+            shakeIntensity -= 0.5; 
+        } else {
+            screenShakeOffset.x = 0; screenShakeOffset.y = 0;
+            canvas.classList.remove('chromatic-aberration');
+        }
+    }
+
+    function addPoints(pts, x, y) {
+        let now = Date.now();
+        if (now - lastHitTime < COMBO_TIMEOUT) { comboCount++; } else { comboCount = 1; }
+        lastHitTime = now;
+
+        let finalPts = pts + (comboCount > 1 ? (comboCount - 1) * 5 : 0);
+        score += finalPts;
+        
+        if (comboCount === 3) spawnFloatingText("OVERRIDE!", x, y - 30, C_NORMAL);
+        else if (comboCount === 5) spawnFloatingText("HACKED!", x, y - 30, C_PHASING);
+        else if (comboCount >= 7 && comboCount % 2 === 1) spawnFloatingText("GOD_MODE::ON", x, y - 30, '#ff00ff');
+
+        if (score > highScore) {
+            highScore = score;
+            try { localStorage.setItem('sysCrashHighScoreV5', highScore); } catch(e) {}
+            highScoreDisplay.innerText = `MAX_SCORE // [${pad(highScore)}]`;
+            highScoreDisplay.style.color = C_PHASING; 
+        }
+        scoreDisplay.innerHTML = `DATA_STREAM // <span>${pad(score)}</span>`;
+    }
+
+    function createParticles(x, y, color, intensity = 1) {
+        let numParticles = Math.floor((15 + Math.random() * 15) * intensity);
+        for (let i = 0; i < numParticles; i++) {
+            let angle = Math.random() * Math.PI * 2; let speed = (Math.random() * 12 + 4) * intensity; 
+            particles.push({
+                x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, color: color, 
+                alpha: 1, size: Math.random() * 3 + 2, decay: Math.random() * 0.03 + 0.015,
+                friction: 0.90 + Math.random() * 0.06, isLine: Math.random() > 0.5 
+            });
+        }
+        particles.push({ x: x, y: y, vx: 0, vy: 0, color: '#FFFFFF', alpha: 1, size: 4 * intensity, decay: 0.15, friction: 1, isFlash: true });
+    }
+
+    function updateAndDrawParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            if (p.isFlash) {
+                p.alpha -= p.decay; p.size += 8; 
+                if (p.alpha <= 0) particles.splice(i, 1);
+                else {
+                    ctx.save(); ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 30; 
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+                }
+                continue;
+            }
+            let prevX = p.x; let prevY = p.y;
+            p.x += p.vx; p.y += p.vy; p.vx *= p.friction; p.vy *= p.friction; p.alpha -= p.decay;
+            if (p.alpha <= 0) particles.splice(i, 1);
+            else {
+                ctx.save(); ctx.globalAlpha = p.alpha; ctx.shadowColor = p.color; ctx.shadowBlur = 10;
+                if (p.isLine) {
+                    ctx.strokeStyle = p.color; ctx.lineWidth = p.size; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(prevX, prevY); ctx.lineTo(p.x + p.vx * 1.2, p.y + p.vy * 1.2); ctx.stroke();
+                } else {
+                    ctx.fillStyle = p.color; ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                }
+                ctx.restore();
+            }
+        }
+    }
+
+    function spawnBall(x, y, angle, speed) {
+        return {
+            x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+            targetVx: Math.cos(angle) * speed, targetVy: Math.sin(angle) * speed,
+            speed: speed, baseLevelSpeed: speed, 
+            history: [], lastHoveredBarrier: -1, lastSegmentChangeTime: 0,
+            perfectCharge: false, isExplosive: false
+        };
+    }
+
+    function initLevel(currentLevel) {
+        let speed = Math.min(BASE_BALL_SPEED + (currentLevel * 0.25), MAX_BALL_SPEED);
+        
+        let dropAngle = Math.PI / 2; 
+        balls = []; 
+        balls.push(spawnBall(centerX, -BALL_RADIUS * 3, dropAngle, speed));
+        
+        balls[0].vx = 0; 
+        balls[0].vy = 7; 
+        balls[0].targetVx = 0;
+        
+        barriers = []; globalRotation = 0;
+        
+        let numLayers = currentLevel < 4 ? 1 : (currentLevel < 8 ? 2 : 3);
+        let maxOuterRadius = 140;
+
+        for (let layer = 0; layer < numLayers; layer++) {
+            let radius = maxOuterRadius - (layer * 35); 
+            let segmentsCount = Math.min(3 + layer + Math.floor(currentLevel / 3), 8);
+            let gapSize = Math.max(Math.PI / 4 - (currentLevel * 0.02), Math.PI / 10); 
+            let baseSegmentLength = (Math.PI * 2) / segmentsCount - gapSize;
+            
+            let bombsInLayer = 0; 
+
+            for (let i = 0; i < segmentsCount; i++) {
+                let start = i * (baseSegmentLength + gapSize); 
+                let end = start + baseSegmentLength;
+                
+                let type = TYPE.NORMAL; let hp = 1; let color = C_NORMAL;
+                let rand = Math.random();
+
+                // 【调整】概率分布：提前引入漂移墙
+                if (currentLevel >= 10 && rand < 0.12) { type = TYPE.REPULSOR; color = C_REPULSOR; } 
+                else if (currentLevel >= 8 && rand < 0.22) { type = TYPE.PHASING; color = C_PHASING; } 
+                else if (currentLevel >= 4 && rand < 0.37) { type = TYPE.MOVING; color = C_MOVING; }   
+                else if (currentLevel >= 4 && rand < 0.52 && bombsInLayer < 1) { 
+                    type = TYPE.BOMB; color = C_BOMB; bombsInLayer++;
+                    let bombLength = baseSegmentLength * 0.4; 
+                    let lengthDiff = baseSegmentLength - bombLength;
+                    start = start + lengthDiff / 2; end = end - lengthDiff / 2;
+                } 
+                else if (currentLevel >= 3 && rand < 0.67) { type = TYPE.HARD; hp = 2; color = C_HARD; } 
+
+                barriers.push({
+                    layerIndex: layer, radius: radius, 
+                    startAngle: start, endAngle: end,
+                    baseStartAngle: start, baseEndAngle: end, 
+                    active: true, type: type, hp: hp, baseColor: color, currentColor: color,
+                    
+                    // 【调整】大幅削减漂移墙的移动速度
+                    currentOffset: 0, moveDir: (Math.random() > 0.5 ? 1 : -1), moveSpeed: 0.004 + Math.random()*0.006, moveRange: gapSize * 0.8,
+                    isSolid: true, lastPhaseTime: Date.now() + Math.random() * 1000, phaseInterval: 1000 + Math.random() * 800
+                });
+            }
+        }
+    }
+
+    function startGame() {
+        startPanel.classList.remove('show'); startPanel.classList.add('hidden');
+        level = 1; score = 0; comboCount = 0; hasRevived = false; reviveCount = 0;
+        scoreDisplay.innerHTML = `DATA_STREAM // <span>0000</span>`;
+        highScoreDisplay.style.color = C_NORMAL; 
+        
+        initLevel(level);
+        currentState = STATE.PLAYING; 
+        particles = []; 
+        if (animationFrameId) cancelAnimationFrame(animationFrameId); 
+        update(); 
+    }
+
+    reviveBtn.addEventListener('click', () => {
+        if (reviveCount >= MAX_REVIVES) return;
+        reviveBtn.innerText = "LOADING_AD...";
+        setTimeout(() => {
+            reviveCount++;
+            startPanel.classList.remove('show'); startPanel.classList.add('hidden');
+            
+            initLevel(level); 
+            comboCount = 0;
+            currentState = STATE.PLAYING;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); 
+            update();
+        }, 800); 
+    });
+
+    function showGameOver(reason) {
+        currentState = STATE.GAMEOVER;
+        titleText.innerText = "FATAL_ERROR"; titleText.style.color = C_BOMB;
+        descText.innerHTML = `FINAL LOG: <span class="highlight-text">[${pad(score)}]</span>`;
+        if (score >= highScore && score > 0) descText.innerHTML += `<br><span style="color:${C_PHASING}">SYS_RECORD_UPDATED</span>`;
+        legendBox.style.display = 'none'; 
+        startBtn.innerText = "REBOOT_SYS";
+
+        if (reviveCount < MAX_REVIVES) {
+            reviveBtn.innerHTML = `WATCH_AD // REVIVE <span class="revive-count">(${MAX_REVIVES - reviveCount}/${MAX_REVIVES})</span>`;
+            reviveBtn.style.display = "block";
+        } else {
+            reviveBtn.style.display = "none";
+        }
+
+        startPanel.classList.remove('hidden'); void startPanel.offsetWidth; startPanel.classList.add('show');
+        triggerShake(15); 
+    }
+
+    startBtn.addEventListener('click', startGame);
+
+    function normalizeAngle(angle) { let a = angle % (Math.PI * 2); return a < 0 ? a + Math.PI * 2 : a; }
+
+    function updateLogic() {
+        if (comboCount > 0 && Date.now() - lastHitTime > COMBO_TIMEOUT) { comboCount = 0; }
+
+        barriers.forEach(b => {
+            if (!b.active) return;
+            if (b.type === TYPE.MOVING) {
+                b.currentOffset += b.moveSpeed * b.moveDir;
+                if (Math.abs(b.currentOffset) > b.moveRange) {
+                    b.moveDir *= -1;
+                    b.currentOffset = b.moveRange * Math.sign(b.currentOffset);
+                }
+                b.startAngle = b.baseStartAngle + b.currentOffset;
+                b.endAngle = b.baseEndAngle + b.currentOffset;
+            }
+            if (b.type === TYPE.PHASING) {
+                if (Date.now() - b.lastPhaseTime > b.phaseInterval) {
+                    b.isSolid = !b.isSolid;
+                    b.lastPhaseTime = Date.now();
+                }
+            }
+        });
+
+        for (let k = balls.length - 1; k >= 0; k--) {
+            let ball = balls[k];
+            
+            ball.history.push({x: ball.x, y: ball.y});
+            let trailLength = Math.min(10 + comboCount * 2, 20);
+            if (ball.history.length > trailLength) ball.history.shift();
+
+            ball.x += ball.vx; ball.y += ball.vy;
+
+            let dx = ball.x - centerX; let dy = ball.y - centerY;
+            let dist = Math.hypot(dx, dy);
+            let absoluteBallAngle = normalizeAngle(Math.atan2(dy, dx));
+            let relativeAngle = normalizeAngle(absoluteBallAngle - globalRotation);
+            let hitProcessed = false;
+
+            let hoveredBarrier = -1;
+            for (let i = 0; i < barriers.length; i++) {
+                if (barriers[i].active && relativeAngle >= barriers[i].startAngle && relativeAngle <= barriers[i].endAngle) {
+                    hoveredBarrier = i; break;
+                }
+            }
+            if (hoveredBarrier !== ball.lastHoveredBarrier) {
+                ball.lastHoveredBarrier = hoveredBarrier;
+                ball.lastSegmentChangeTime = Date.now();
+            }
+
+            let nx = dx / dist; let ny = dy / dist;
+            let dotProduct = ball.vx * nx + ball.vy * ny;
+
+            if (dist < 140 + BARRIER_THICKNESS) {
+                barriers.forEach(b => {
+                    if (b.type === TYPE.PHASING && b.isSolid && b.active) {
+                        if (Math.abs(dist - b.radius) <= BALL_RADIUS && relativeAngle >= b.startAngle && relativeAngle <= b.endAngle) {
+                            ball.x += ball.vx; ball.y += ball.vy; 
+                        }
+                    }
+                });
+            }
+
+            if (dotProduct > 0) {
+                for (let i = 0; i < barriers.length; i++) {
+                    let b = barriers[i];
+                    if (!b.active) continue;
+                    if (b.type === TYPE.PHASING && !b.isSolid) continue; 
+
+                    if (Math.abs(dist - b.radius) <= BALL_RADIUS + (BARRIER_THICKNESS / 2)) {
+                        let angleTolerance = Math.atan2(BALL_RADIUS, b.radius);
+                        let midAngle = (b.startAngle + b.endAngle) / 2;
+                        let halfSpan = (b.endAngle - b.startAngle) / 2 + angleTolerance;
+                        let diff = Math.abs(relativeAngle - midAngle);
+                        if (diff > Math.PI) diff = Math.PI * 2 - diff;
+
+                        if (diff <= halfSpan) {
+                            if (hitProcessed) continue; hitProcessed = true;
+
+                            let isPerfect = false;
+                            if (Date.now() - ball.lastSegmentChangeTime <= 150 && b.type !== TYPE.BOMB && b.type !== TYPE.REPULSOR) isPerfect = true;
+
+                            if (b.type === TYPE.BOMB) {
+                                createParticles(ball.x, ball.y, b.currentColor, 2.5); balls.splice(k, 1); break;
+                            } 
+
+                            if (ball.isExplosive && b.type !== TYPE.REPULSOR) {
+                                b.active = false; addPoints(30, ball.x, ball.y);
+                                createParticles(ball.x, ball.y, '#FFD659', 2.0); 
+                                spawnFloatingText("EXPLOSION!", ball.x, ball.y - 20, '#FFD659');
+                                triggerShake(12); ball.isExplosive = false; ball.perfectCharge = false;
+                            } 
+                            else if (isPerfect) {
+                                ball.perfectCharge = true; ball.isExplosive = true; 
+                                triggerShake(10); spawnFloatingText("JUST FRAME!!", ball.x, ball.y - 40, '#FFFFFF');
+                                addPoints(50, ball.x, ball.y); createParticles(ball.x, ball.y, '#FFFFFF', 3.0);
+                                b.active = false; 
+                            }
+                            else if (b.type === TYPE.REPULSOR) {
+                                triggerShake(8); createParticles(ball.x, ball.y, C_REPULSOR, 1.5);
+                                spawnFloatingText("REPULSED!", ball.x, ball.y - 30, C_REPULSOR);
+                                addPoints(15, ball.x, ball.y);
+                                let curSpeed = Math.hypot(ball.vx, ball.vy);
+                                let refAngle = Math.atan2(ball.vy - 2 * dotProduct * ny, ball.vx - 2 * dotProduct * nx);
+                                refAngle += (Math.random() - 0.5) * 0.4; 
+                                curSpeed = Math.min(curSpeed * 1.5, MAX_BALL_SPEED * 1.5); 
+                                ball.vx = Math.cos(refAngle) * curSpeed; ball.vy = Math.sin(refAngle) * curSpeed;
+                                ball.speed = curSpeed;
+                                ball.x = centerX + (b.radius - BARRIER_THICKNESS/2 - BALL_RADIUS - 1) * Math.cos(absoluteBallAngle);
+                                ball.y = centerY + (b.radius - BARRIER_THICKNESS/2 - BALL_RADIUS - 1) * Math.sin(absoluteBallAngle);
+                                continue; 
+                            }
+                            else {
+                                triggerShake(4); 
+                                if (b.type === TYPE.HARD) {
+                                    b.hp--;
+                                    if (b.hp <= 0) { b.active = false; addPoints(20, ball.x, ball.y); createParticles(ball.x, ball.y, b.baseColor, 1.5); } 
+                                    else { b.currentColor = b.baseColor; addPoints(10, ball.x, ball.y); createParticles(ball.x, ball.y, '#ffffff', 0.8); }
+                                } else { b.active = false; addPoints(10, ball.x, ball.y); createParticles(ball.x, ball.y, b.currentColor, 1.2); }
+                            }
+
+                            ball.vx = ball.vx - 2 * dotProduct * nx; ball.vy = ball.vy - 2 * dotProduct * ny;
+                            ball.x = centerX + (b.radius - BARRIER_THICKNESS/2 - BALL_RADIUS - 1) * nx;
+                            ball.y = centerY + (b.radius - BARRIER_THICKNESS/2 - BALL_RADIUS - 1) * ny;
+
+                            let speedMult;
+                            if (isPerfect) { speedMult = ball.perfectCharge ? 1.0 : 1.2; } 
+                            else { speedMult = level >= 4 ? 1.01 : 1.02; }
+                            let maxSpd = ball.perfectCharge ? MAX_BALL_SPEED * 1.2 : MAX_BALL_SPEED; 
+                            ball.speed = Math.min(ball.baseLevelSpeed * speedMult, maxSpd);
+                            ball.baseLevelSpeed = ball.speed; 
+                            
+                            let currentSpeed = Math.hypot(ball.vx, ball.vy);
+                            ball.vx = (ball.vx / currentSpeed) * ball.speed; ball.vy = (ball.vy / currentSpeed) * ball.speed;
+                        }
+                    }
+                } 
+            }
+
+            let deathRadius = Math.max(width, height) / 2 + 50;
+            if (dist > deathRadius && dotProduct > 0) balls.splice(k, 1); 
+        } 
+
+        if (balls.length === 0) { showGameOver('flyout'); return; }
+        
+        let targetsLeft = barriers.filter(b => b.active && b.type !== TYPE.BOMB && b.type !== TYPE.REPULSOR).length;
+        if (targetsLeft === 0) { currentState = STATE.TRANSITION_OUT; balls.forEach(b => { b.vx = 0; b.vy = 2; }); return; }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        applyShake(); 
+        
+        ctx.save(); ctx.translate(screenShakeOffset.x, screenShakeOffset.y);
+
+        if (shakeIntensity >= 6) {
+            ctx.fillStyle = 'rgba(255, 0, 60, 0.15)'; ctx.fillRect(-10, 0, width + 20, height);
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; ctx.fillRect(10, 0, width, height);
+        }
+
+        ctx.save(); ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)'; ctx.lineWidth = 4;
+        ctx.font = 'bold 200px Share Tech Mono'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.strokeText(pad(level), centerX, centerY); ctx.restore();
+
+        let uniqueRadii = [...new Set(barriers.map(b => b.radius))];
+        uniqueRadii.forEach(r => {
+            ctx.beginPath(); ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.15)'; ctx.lineWidth = 1; ctx.setLineDash([5, 10]); 
+            ctx.stroke(); ctx.setLineDash([]);
+        });
+
+        ctx.save(); ctx.translate(centerX, centerY); ctx.rotate(globalRotation);
+
+        barriers.forEach(b => {
+            if (b.active) {
+                if (b.type === TYPE.PHASING && !b.isSolid) {
+                    ctx.beginPath(); ctx.arc(0, 0, b.radius, b.startAngle, b.endAngle);
+                    ctx.strokeStyle = 'rgba(0, 255, 102, 0.1)'; ctx.lineWidth = BARRIER_THICKNESS; 
+                    ctx.setLineDash([2, 6]); ctx.stroke(); ctx.setLineDash([]);
+                    return; 
+                }
+
+                if (b.type === TYPE.BOMB) {
+                    ctx.fillStyle = C_BOMB; ctx.shadowColor = C_BOMB; ctx.shadowBlur = 15;
+                    let arcLength = b.endAngle - b.startAngle;
+                    let numSpikes = Math.max(3, Math.floor(arcLength / 0.15)); 
+                    let steps = numSpikes * 2; let stepAngle = arcLength / steps;
+                    let rOuter = b.radius + BARRIER_THICKNESS / 2; let rInner = b.radius - BARRIER_THICKNESS / 2 - 2; 
+
+                    ctx.beginPath();
+                    for (let j = 0; j <= steps; j++) {
+                        let currentAngle = b.startAngle + j * stepAngle;
+                        let r = (j % 2 === 0) ? rOuter : rInner;
+                        let x = r * Math.cos(currentAngle); let y = r * Math.sin(currentAngle);
+                        if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.arc(0, 0, rOuter, b.endAngle, b.startAngle, true); ctx.closePath(); ctx.fill();
+                    ctx.shadowBlur = 0;
+                } 
+                else if (b.type === TYPE.REPULSOR) {
+                    ctx.beginPath(); ctx.arc(0, 0, b.radius, b.startAngle, b.endAngle);
+                    ctx.strokeStyle = C_REPULSOR; ctx.lineWidth = BARRIER_THICKNESS + 2; 
+                    ctx.lineCap = 'butt'; ctx.shadowColor = C_REPULSOR; ctx.shadowBlur = 20; ctx.stroke();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.shadowBlur = 0; ctx.stroke(); 
+                }
+                else {
+                    ctx.beginPath(); ctx.arc(0, 0, b.radius, b.startAngle, b.endAngle);
+                    ctx.strokeStyle = b.currentColor; ctx.lineWidth = BARRIER_THICKNESS; 
+                    ctx.lineCap = 'butt'; ctx.shadowColor = b.currentColor; ctx.shadowBlur = 10; ctx.stroke();
+                    
+                    if (b.type === TYPE.HARD && b.hp === 2) {
+                        ctx.beginPath(); ctx.arc(0, 0, b.radius, b.startAngle + 0.05, b.endAngle - 0.05);
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = BARRIER_THICKNESS - 6; ctx.shadowBlur = 0; ctx.stroke();
+                    }
+                }
+            }
+        });
+        ctx.restore();
+
+        balls.forEach(ball => {
+            let trailColor = ball.perfectCharge ? '#FFD659' : '#ff00ff';
+            let coreColor = ball.perfectCharge ? '#FFFFFF' : '#fff';
+            let haloColor = ball.perfectCharge ? '#FFD659' : '#ff00ff';
+
+            if (ball.history.length > 1) {
+                ctx.beginPath(); ctx.moveTo(ball.history[0].x, ball.history[0].y);
+                for (let i = 1; i < ball.history.length; i++) ctx.lineTo(ball.history[i].x, ball.history[i].y);
+                ctx.strokeStyle = trailColor; ctx.lineWidth = BALL_RADIUS * (ball.perfectCharge ? 2.5 : 1.5); 
+                ctx.globalAlpha = ball.perfectCharge ? 0.8 : 0.5; ctx.shadowColor = trailColor; ctx.shadowBlur = 15;
+                ctx.stroke(); ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+            }
+
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, BALL_RADIUS * (ball.perfectCharge ? 1.5 : 1), 0, Math.PI * 2);
+            ctx.fillStyle = coreColor; ctx.shadowColor = haloColor; ctx.shadowBlur = ball.perfectCharge ? 40 : 20; ctx.fill(); 
+            ctx.fillStyle = haloColor; ctx.arc(ball.x, ball.y, BALL_RADIUS/2, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; 
+        });
+        
+        updateAndDrawParticles(); ctx.restore(); 
+    }
+
+    function update() {
+        if (currentState === STATE.PLAYING) {
+            updateLogic(); draw();
+        } 
+        else if (currentState === STATE.TRANSITION_OUT) {
+            balls.forEach(b => { b.history.push({x: b.x, y: b.y}); if(b.history.length > 5) b.history.shift(); b.vy += 0.2; b.y += b.vy; b.x += b.vx; });
+            draw(); 
+            let allOut = balls.every(b => b.y > height + BALL_RADIUS * 2);
+            if (allOut) {
+                level++; addPoints(100, centerX, centerY - 50); spawnFloatingText(">> BYPASS_SUCCESS", centerX, centerY, C_PHASING);
+                initLevel(level); 
+                currentState = STATE.PLAYING; 
+            }
+        }
+        
+        if (currentState !== STATE.GAMEOVER && currentState !== STATE.START) animationFrameId = requestAnimationFrame(update);
+        else if (currentState === STATE.GAMEOVER) draw(); 
+    }
+
+    draw(); 
+</script>
+</body>
+</html>
